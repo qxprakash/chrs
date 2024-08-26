@@ -76,7 +76,7 @@ fn chris_client(cube_url: CubeUrl) -> ChrisClient {
         let token = {
             let account_creator = Account::new(&cube_url, &username, &password);
             account_creator.create_account(&email).await.unwrap();
-            account_creator.get_token().await.unwrap()
+            account_creator.get_token().await.unwrap_or_else(|e| panic!("Failed to get token: {:?}", e))
         };
         ChrisClient::build(cube_url, username, token)
             .unwrap()

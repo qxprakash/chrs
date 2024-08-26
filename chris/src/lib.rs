@@ -23,3 +23,4 @@ pub use models::*;
 
 // re-export
 pub use reqwest;
+pub use account::AuthError;

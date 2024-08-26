@@ -3,6 +3,8 @@
 
 use crate::types::{CubeUrl, ItemUrl, UserId, Username};
 use serde::{Deserialize, Serialize};
+use reqwest::StatusCode;
+use thiserror::Error;
 
 #[derive(Deserialize)]
 struct AuthTokenResponse {
@@ -52,7 +54,7 @@ impl<'a> Account<'a> {
         }
     }
 
-    pub async fn get_token(&self) -> Result<String, reqwest::Error> {
+    pub async fn get_token(&self) -> Result<String, AuthError> {
         let auth_url = format!("{}auth-token/", &self.url);
         let req = self
             .client
@@ -62,10 +64,20 @@ impl<'a> Account<'a> {
                 username: self.username,
                 password: self.password,
             });
-        let res = req.send().await?;
-        res.error_for_status_ref()?;
-        let token_object: AuthTokenResponse = res.json().await?;
-        Ok(token_object.token)
+
+        let res = req.send().await.map_err(AuthError::NetworkError)?;
+
+        match res.status() {
+            StatusCode::OK => {
+                let token_object: AuthTokenResponse = res.json().await.map_err(AuthError::NetworkError)?;
+                Ok(token_object.token)
+            }
+            StatusCode::UNAUTHORIZED => Err(AuthError::InvalidCredentials),
+            status if status.is_server_error() => {
+                Err(AuthError::ServerError(status.to_string()))
+            }
+            _ => Err(AuthError::UnexpectedResponse),
+        }
     }
 
     pub async fn create_account(&self, email: &str) -> Result<UserCreatedResponse, reqwest::Error> {
@@ -84,4 +96,16 @@ impl<'a> Account<'a> {
         let created_user: UserCreatedResponse = res.json().await?;
         Ok(created_user)
     }
+}
+
+#[derive(Error, Debug)]
+pub enum AuthError {
+    #[error("Invalid username or password")]
+    InvalidCredentials,
+    #[error("Server error: {0}")]
+    ServerError(String),
+    #[error("Unexpected response. The specified URL might not be a valid CUBE URL")]
+    UnexpectedResponse,
+    #[error("Network error: {0}")]
+    NetworkError(#[from] reqwest::Error),
 }

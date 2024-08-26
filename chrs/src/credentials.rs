@@ -7,9 +7,10 @@ use reqwest_retry::{
 };
 use std::path::PathBuf;
 
-use chris::reqwest::Response;
+use chris::reqwest::{self, Response};
 use chris::types::{CubeUrl, PluginInstanceId, Username};
 use chris::{Account, AnonChrisClient, ChrisClient, EitherClient};
+use chris::AuthError;
 
 use crate::login::state::ChrsSessions;
 use crate::login::store::CubeState;
@@ -209,15 +210,22 @@ async fn get_authed_client(
         })
 }
 
-fn handle_error(error: chris::reqwest::Error, url: &CubeUrl) -> eyre::Error {
-    if let Some(code) = error.status() {
-        if code == chris::reqwest::StatusCode::UNAUTHORIZED {
-            eyre::Error::msg("Incorrect login")
-        } else {
-            eyre::Error::msg(format!("HTTP status code: {code}"))
+fn handle_error(error: AuthError, url: &CubeUrl) -> eyre::Error {
+    match error {
+        AuthError::InvalidCredentials => eyre::Error::msg("Invalid username or password"),
+        AuthError::ServerError(status) => eyre::Error::msg(format!("Server error: {}", status)),
+        AuthError::UnexpectedResponse => eyre::Error::msg(format!("Unexpected response from {}", url)),
+        AuthError::NetworkError(e) => {
+            if let Some(code) = e.status() {
+                if code == reqwest::StatusCode::UNAUTHORIZED {
+                    eyre::Error::msg("Incorrect login")
+                } else {
+                    eyre::Error::msg(format!("HTTP status code: {code}"))
+                }
+            } else {
+                eyre::Error::msg(format!("Failed HTTP request to {url}"))
+            }
         }
-    } else {
-        eyre::Error::msg(format!("Failed HTTP request to {url}"))
     }
 }
 

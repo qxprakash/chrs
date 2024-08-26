@@ -4,8 +4,9 @@ use super::store;
 use crate::credentials::Credentials;
 use chris::{
     types::{CubeUrl, Username},
-    Account, AnonChrisClient, ChrisClient,
+    Account, AnonChrisClient, ChrisClient
 };
+use chris::AuthError;
 use color_eyre::eyre::{bail, Context, Result};
 use color_eyre::owo_colors::OwoColorize;
 
@@ -74,8 +75,18 @@ async fn login_with_password(
         password,
     };
 
-    let token = account.get_token().await.wrap_err("Could not log in")?;
-    Ok(Some(token))
+    match account.get_token().await {
+        Ok(token) => Ok(Some(token)),
+        Err(err) => {
+            let error_message = match err {
+                AuthError::InvalidCredentials => "Invalid username or password".to_string(),
+                AuthError::ServerError(status) => format!("Server error: {}", status),
+                AuthError::UnexpectedResponse => "Unexpected response. The specified URL might not be a valid CUBE URL".to_string(),
+                AuthError::NetworkError(e) => format!("Network error: {}", e),
+            };
+            Err(color_eyre::eyre::eyre!(error_message))
+        }
+    }
 }
 
 /// Verify token works for the CUBE.
