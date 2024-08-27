@@ -35,6 +35,19 @@ struct CreateUserData<'a> {
     email: &'a str,
 }
 
+
+#[derive(Error, Debug)]
+pub enum AuthError {
+    #[error("Invalid username or password")]
+    InvalidCredentials,
+    #[error("Server error: {0}")]
+    ServerError(String),
+    #[error("Unexpected response. The specified URL might not be a valid CUBE URL")]
+    UnexpectedResponse,
+    #[error("Network error: {0}")]
+    NetworkError(#[from] reqwest::Error),
+}
+
 /// CUBE username and password struct.
 /// [Account] is a builder for [ChrisClient].
 pub struct Account<'a> {
@@ -98,14 +111,3 @@ impl<'a> Account<'a> {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum AuthError {
-    #[error("Invalid username or password")]
-    InvalidCredentials,
-    #[error("Server error: {0}")]
-    ServerError(String),
-    #[error("Unexpected response. The specified URL might not be a valid CUBE URL")]
-    UnexpectedResponse,
-    #[error("Network error: {0}")]
-    NetworkError(#[from] reqwest::Error),
-}
