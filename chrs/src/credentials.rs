@@ -212,20 +212,22 @@ async fn get_authed_client(
 
 fn handle_error(error: AuthError, url: &CubeUrl) -> eyre::Error {
     match error {
-        AuthError::InvalidCredentials => eyre::Error::msg("Invalid username or password"),
-        AuthError::ServerError(status) => eyre::Error::msg(format!("Server error: {}", status)),
-        AuthError::UnexpectedResponse => eyre::Error::msg(format!("Unexpected response from {}", url)),
-        AuthError::NetworkError(e) => {
-            if let Some(code) = e.status() {
+        AuthError::InvalidCredentials(status) => eyre::Error::msg(format!("Invalid username or password (Status: {})", status)),
+        AuthError::ServerError(msg, status) => eyre::Error::msg(format!("Server error: {} (Status: {})", msg, status)),
+        AuthError::UnexpectedResponse(status) => eyre::Error::msg(format!("Unexpected response from {} (Status: {})", url, status)),
+        AuthError::NetworkError(e, status) => {
+            if let Some(code) = status.or(e.status()) {
                 if code == reqwest::StatusCode::UNAUTHORIZED {
-                    eyre::Error::msg("Incorrect login")
+                    eyre::Error::msg(format!("Incorrect login (Status: {})", code))
                 } else {
-                    eyre::Error::msg(format!("HTTP status code: {code}"))
+                    eyre::Error::msg(format!("HTTP error: {} (Status: {})", e, code))
                 }
             } else {
-                eyre::Error::msg(format!("Failed HTTP request to {url}"))
+                eyre::Error::msg(format!("Network error: {} (Failed request to {})", e, url))
             }
         }
+        AuthError::ParseError(e, status) => eyre::Error::msg(format!("Failed to parse response: {} (Status: {})", e, status)),
+        AuthError::NotFound(status) => eyre::Error::msg(format!("Resource not found. The specified URL might be incorrect (Status: {})", status)),
     }
 }
 
@@ -244,6 +246,8 @@ fn retry_strategy(retries: u32) -> impl reqwest_middleware::Middleware {
     let policy = ExponentialBackoff::builder().build_with_max_retries(retries);
     RetryTransientMiddleware::new_with_policy_and_strategy(policy, RetryStrategy)
 }
+
+
 
 /// - Client errors are fatal
 /// - Everything else can be retried

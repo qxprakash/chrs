@@ -7,8 +7,9 @@ use chris::{
     Account, AnonChrisClient, ChrisClient
 };
 use chris::AuthError;
-use color_eyre::eyre::{bail, Context, Result};
+use color_eyre::eyre::{bail, Context, Result, eyre};
 use color_eyre::owo_colors::OwoColorize;
+use color_eyre::Help; // Import the Help trait
 
 pub async fn login(
     Credentials {
@@ -78,13 +79,32 @@ async fn login_with_password(
     match account.get_token().await {
         Ok(token) => Ok(Some(token)),
         Err(err) => {
-            let error_message = match err {
-                AuthError::InvalidCredentials => "Invalid username or password".to_string(),
-                AuthError::ServerError(status) => format!("Server error: {}", status),
-                AuthError::UnexpectedResponse => "Unexpected response. The specified URL might not be a valid CUBE URL".to_string(),
-                AuthError::NetworkError(e) => format!("Network error: {}", e),
+            let error_details = match &err {
+                AuthError::InvalidCredentials(status) =>
+                    format!("Invalid username or password | {} : {}", "Error Msg".yellow().bold(), status),
+                AuthError::ServerError(msg, status) =>
+                    format!("Server error: {} | {} : {} ",  msg, "Error Msg".yellow().bold(), status),
+                AuthError::UnexpectedResponse(status) =>
+                    format!("Status: {} | Unexpected response: The specified URL might not be a valid CUBE URL", status),
+                AuthError::NetworkError(e, status) =>
+                    format!("Network error | {} : {} | {}", "Error Msg".yellow().bold(), status.map_or("N/A".to_string(), |s| s.to_string()),e),
+                AuthError::ParseError(e, status) =>
+                    format!("Parse error | {}: {} -- Unexpected response, maybe the specified URL isn’t a CUBE URL? | {}: {}", "Error Msg".yellow().bold(), e, "Status Code".yellow().bold(), status),
+                AuthError::NotFound(status) =>
+                    format!("Not Found | {}: The specified URL might be incorrect , it might not be a CUBE URL | {} : {}", "Error Msg".yellow().bold(), "Status Code".yellow().bold(), status),
             };
-            Err(color_eyre::eyre::eyre!(error_message))
+
+            let suggestion = match &err {
+                AuthError::InvalidCredentials(_) => "Please check your username and password and try again.",
+                AuthError::ServerError(_, _) => "Please try again later or contact support if the issue persists.",
+                AuthError::UnexpectedResponse(_) => "Please verify the URL and ensure it points to a valid CUBE instance.",
+                AuthError::NetworkError(_, _) => "Please check your network connection and try again.",
+                AuthError::ParseError(_, _) => "Please verify the URL and ensure it points to a valid CUBE instance.",
+                AuthError::NotFound(_) => "Please verify the URL and ensure it points to a valid CUBE instance.",
+            };
+
+            Err(eyre!("Login failed\n{}: {}", "Error".red().bold(), error_details))
+                .with_suggestion(|| suggestion.to_string())
         }
     }
 }
